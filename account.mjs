@@ -9,6 +9,16 @@ export function initAccounts({ getData, setData, refresh, report }) {
   const open = id => { if (!$(id).open) $(id).showModal(); };
   const editing = () => document.activeElement?.matches('main input, main textarea');
   const signed = () => !!user;
+  async function emailStatus() {
+    if (!user) return;
+    const ticket = generation;
+    const { data, error } = await client.rpc('journal_email_status');
+    if (ticket !== generation) return;
+    $('emailState').textContent = error ? '暂时无法读取验证状态' : data ? '邮箱已验证' : '邮箱未验证（不影响使用和同步）';
+    $('verifyEmail').hidden = !!data;
+    if (data) $('emailCodeForm').hidden = true;
+    return !error && data === true;
+  }
   function status(text) {
     const conflicts = store ? Object.keys(store.state.conflicts).length : 0;
     $('status').dataset.conflict = String(!!conflicts);
@@ -22,6 +32,9 @@ export function initAccounts({ getData, setData, refresh, report }) {
     $('signedIn').hidden = !signed();
     $('resetForm').hidden = true;
     $('signedEmail').textContent = user?.email || '';
+    $('emailState').textContent = user ? '正在读取邮箱验证状态…' : '';
+    $('verifyEmail').hidden = true;
+    $('emailCodeForm').hidden = true;
     $('accountState').textContent = !configured ? '云同步尚未启用，本机记录仍可正常使用。' :
       user ? '同一邮箱账号可以在手机和电脑上同步手账。' : '登录后可同步手账；未登录时只保存在此设备。';
   }
@@ -127,12 +140,41 @@ export function initAccounts({ getData, setData, refresh, report }) {
         await client.auth.signInWithPassword({ email, password });
       if (result.error) throw result.error;
       $('password').value = '';
-      $('authMessage').textContent = action === 'signup' ? '请查看邮箱中的确认邮件，确认后即可登录。' :
+      $('authMessage').textContent = action === 'signup' ?
+        (result.data.session ? '注册成功，已登录。' : '请查看邮箱中的确认邮件，确认后即可登录。') :
         action === 'forgot' ? '如果该邮箱可接收重置邮件，请按邮件中的链接设置新密码。' : '登录成功。';
     } catch (error) { $('authMessage').textContent = error.message; }
     finally { buttons.forEach(button => { button.disabled = false; }); }
   }
-  $('account').onclick = () => { accountView(); open('accountDialog'); };
+  $('account').onclick = () => { accountView(); open('accountDialog'); emailStatus(); };
+  $('verifyEmail').onclick = async () => {
+    const email = user.email, ticket = generation;
+    const button = $('verifyEmail');
+    button.disabled = true;
+    try {
+      const { error } = await client.auth.signInWithOtp({ email,
+        options: { shouldCreateUser: false } });
+      if (ticket !== generation) return;
+      if (error) throw error;
+      $('emailCodeForm').hidden = false;
+      $('authMessage').textContent = '验证码已发送到账号邮箱，请在下方输入。';
+    } catch (error) { if (ticket === generation) $('authMessage').textContent = error.message; }
+    finally { button.disabled = false; }
+  };
+  $('emailCodeForm').onsubmit = async event => {
+    event.preventDefault();
+    const button = $('confirmEmailCode');
+    button.disabled = true;
+    try {
+      const { error } = await client.auth.verifyOtp({ email: user.email,
+        token: $('emailCode').value.trim(), type: 'email' });
+      if (error) throw error;
+      $('emailCode').value = '';
+      if (!await emailStatus()) throw Error('验证码已通过，验证状态暂未保存，请稍后重新打开我的账号。');
+      $('authMessage').textContent = '邮箱验证成功。';
+    } catch (error) { $('authMessage').textContent = error.message; }
+    finally { button.disabled = false; }
+  };
   document.querySelectorAll('[data-close]').forEach(button => {
     button.onclick = () => $(button.dataset.close).close();
   });
@@ -143,7 +185,7 @@ export function initAccounts({ getData, setData, refresh, report }) {
     event.preventDefault();
     const { error } = await client.auth.updateUser({ password: $('newPassword').value });
     $('authMessage').textContent = error ? error.message : '密码已更新。';
-    if (!error) { $('newPassword').value = ''; accountView(); }
+    if (!error) { $('newPassword').value = ''; accountView(); emailStatus(); }
   };
   $('syncNow').onclick = async () => { await sync(); conflictView(); };
   $('status').onclick = () => Object.keys(store?.state.conflicts || {}).length ? conflictView() : sync();
@@ -185,6 +227,7 @@ export function initAccounts({ getData, setData, refresh, report }) {
       // Supabase callbacks must not await additional auth API calls.
       queueMicrotask(async () => {
         await sessionChanged(session);
+        if (session && ['SIGNED_IN', 'INITIAL_SESSION', 'PASSWORD_RECOVERY'].includes(event)) await emailStatus();
         if (event === 'PASSWORD_RECOVERY') {
           $('authForm').hidden = true; $('signedIn').hidden = true; $('resetForm').hidden = false;
           open('accountDialog');

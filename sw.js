@@ -1,4 +1,4 @@
-const CACHE = 'shijian-shell-v1';
+const CACHE = 'shijian-shell-v2';
 const SHELL = ['./', './index.html', './style.css', './account.css', './app.js', './model.mjs',
   './account.mjs', './sync.mjs', './cloud.mjs', './config.mjs', './supabase-vendor.mjs',
   './manifest.webmanifest', './icon-original.ico', './icon-original-192.png', './icon-solid.png'];

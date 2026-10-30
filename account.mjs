@@ -123,7 +123,8 @@ export function initAccounts({ getData, setData, refresh, report }) {
       if (action === 'signup' && password.length < 8) throw Error('注册密码至少需要 8 个字符。');
       const result = action === 'signup' ? await client.auth.signUp({ email, password,
         options: { emailRedirectTo: redirectTo } }) : action === 'forgot' ?
-        await client.auth.resetPasswordForEmail(email, { redirectTo }) :
+        await client.auth.resetPasswordForEmail(email, {
+          redirectTo: new URL('./reset-password.html', location.href).href }) :
         await client.auth.signInWithPassword({ email, password });
       if (result.error) throw result.error;
       $('password').value = '';

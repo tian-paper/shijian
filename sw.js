@@ -1,8 +1,11 @@
-const CACHE = 'shijian-shell-v4';
+const CACHE = 'shijian-shell-v5';
 const SHELL = ['./', './index.html', './style.css', './account.css', './app.js', './model.mjs',
   './account.mjs', './sync.mjs', './cloud.mjs', './config.mjs', './supabase-vendor.mjs',
   './manifest.webmanifest', './icon-original.ico', './icon-original-192.png', './icon-solid.png'];
 // Password reset pages and auth-bearing redirects are deliberately not cached.
+self.addEventListener('message', event => {
+  if (event.data === 'SKIP_WAITING') self.skipWaiting();
+});
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)));
 });

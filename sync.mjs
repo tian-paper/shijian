@@ -85,10 +85,11 @@ export class NotebookStore {
 }
 
 export class SyncEngine {
-  constructor(store, api, onChange = () => {}) {
+  constructor(store, api, onChange = () => {}, canReceive = () => true) {
     this.store = store;
     this.api = api;
     this.onChange = onChange;
+    this.canReceive = canReceive;
     this.stopped = false;
     this.running = null;
   }
@@ -100,7 +101,10 @@ export class SyncEngine {
   async run() {
     const rows = await this.api.list();
     if (this.stopped) return;
-    this.store.receive(rows);
+    if (this.canReceive()) {
+      this.store.receive(rows);
+      this.onChange();
+    }
     for (const date of Object.keys(this.store.state.dirty)) {
       if (this.stopped) return;
       if (this.store.state.conflicts[date]) continue;

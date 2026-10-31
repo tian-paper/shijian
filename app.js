@@ -20,3 +20,38 @@ window.addEventListener('storage',e=>{if(e.key===key){blocked=true;$('status').t
 
 accounts=initAccounts({getData:()=>data,setData:value=>{data=value;blocked=false;document.querySelector('main').inert=false;},refresh:render,report:message});
 if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>message('离线页面暂不可用，当前记录仍保存在本机。'));
+
+const avatar=$('userAvatar'),userMenu=$('userMenu');
+function closeUserMenu(){userMenu.hidden=true;avatar.setAttribute('aria-expanded','false');}
+avatar.onclick=()=>{userMenu.hidden=!userMenu.hidden;avatar.setAttribute('aria-expanded',String(!userMenu.hidden));};
+document.addEventListener('click',event=>{if(!event.target.closest('.user-dock'))closeUserMenu();});
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!userMenu.hidden){closeUserMenu();avatar.focus();}});
+userMenu.addEventListener('click',event=>{if(event.target.closest('button'))closeUserMenu();});
+document.querySelectorAll('[data-open]').forEach(button=>{button.onclick=()=>$(button.dataset.open).showModal();});
+async function refreshApp(){
+  const buttons=[$('refreshApp'),$('versionRefresh')];
+  if(!navigator.onLine){message('当前离线，联网后再刷新。手账仍保存在本机。');return;}
+  buttons.forEach(button=>button.disabled=true);
+  try{
+    // A network check avoids presenting an offline cached page as the newest version.
+    const response=await fetch('./index.html',{cache:'no-store'});
+    if(!response.ok)throw Error('页面更新暂时不可用');
+    if('serviceWorker' in navigator){
+      const registration=await navigator.serviceWorker.getRegistration();
+      if(registration){
+        await registration.update();
+        if(registration.waiting){
+          await new Promise(resolve=>{
+            const done=()=>{clearTimeout(timeout);navigator.serviceWorker.removeEventListener('controllerchange',done);resolve();};
+            const timeout=setTimeout(done,2000);
+            navigator.serviceWorker.addEventListener('controllerchange',done);
+            registration.waiting.postMessage('SKIP_WAITING');
+          });
+        }
+      }
+    }
+    location.reload();
+  }catch(error){message(`刷新未完成：${error.message}。请稍后再试，记录仍保留在本机。`);buttons.forEach(button=>button.disabled=false);}
+}
+$('refreshApp').onclick=refreshApp;
+$('versionRefresh').onclick=refreshApp;

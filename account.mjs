@@ -17,7 +17,9 @@ export function initAccounts({ getData, setData, refresh, report }) {
       user ? '已同步' : '已保存到本机');
   }
   function accountView() {
-    $('account').textContent = user ? '我的账号' : '登录同步';
+    $('account').textContent = user ? '我的账号' : '登录';
+    $('userAvatar').classList.toggle('signed-in', !!user);
+    $('userAvatar').title = user ? '已登录 · 打开用户菜单' : '打开用户菜单';
     $('authForm').hidden = signed() || !configured;
     $('signedIn').hidden = !signed();
     $('resetForm').hidden = true;
@@ -28,8 +30,6 @@ export function initAccounts({ getData, setData, refresh, report }) {
   function schedule() { clearTimeout(timer); timer = setTimeout(sync, 1000); }
   async function sync() {
     if (!engine || busy) return;
-    // Do not replace a day's row objects while an editor holds references to them.
-    if (editing()) return;
     if (!navigator.onLine) { status('离线 · 已保存到本机'); return; }
     const current = engine, ticket = generation;
     busy = true;
@@ -37,8 +37,7 @@ export function initAccounts({ getData, setData, refresh, report }) {
     try {
       await current.sync();
       if (ticket !== generation) return;
-      setData(store.data);
-      refresh();
+      if (!editing()) { setData(store.data); refresh(); }
       status();
       if (store.pending && !Object.keys(store.state.conflicts).length) schedule();
     } catch (error) {
@@ -66,7 +65,9 @@ export function initAccounts({ getData, setData, refresh, report }) {
     try {
       if (user) {
         store = new NotebookStore(localStorage, user.id);
-        engine = new SyncEngine(store, journalApi(user.id));
+        engine = new SyncEngine(store, journalApi(user.id), () => {
+          if (!editing()) { setData(store.data); refresh(); }
+        }, () => !editing());
         setData(store.data);
       } else setData(structuredClone(guest));
       refresh();
@@ -147,8 +148,9 @@ export function initAccounts({ getData, setData, refresh, report }) {
     $('authMessage').textContent = error ? error.message : '密码已更新。';
     if (!error) { $('newPassword').value = ''; accountView(); }
   };
-  $('syncNow').onclick = async () => { await sync(); conflictView(); };
-  $('status').onclick = () => Object.keys(store?.state.conflicts || {}).length ? conflictView() : sync();
+  $('status').onclick = () => {
+    if (Object.keys(store?.state.conflicts || {}).length) conflictView();
+  };
   $('signout').onclick = async () => {
     await sync();
     if (store?.pending && !confirm('还有未同步或待选择版本的记录。退出后会保留在此设备的账号缓存中，下次登录此账号可继续同步。仍要退出？')) return;
